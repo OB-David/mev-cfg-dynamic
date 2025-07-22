@@ -73,8 +73,10 @@ impl BlockchainService for EthersBlockchainService {
         let mut merged_steps = Vec::new();
         
         for (i, log) in struct_logs.iter().enumerate() {
-            // Extract necessary fields from standard trace
+           
             let pc = log.get("pc").and_then(|v| v.as_u64()).unwrap_or(0);
+
+            // Get opcode
             let op = log.get("op").and_then(|v| v.as_str()).unwrap_or("").to_string();
             
             // Get stack data, ensure format consistency
@@ -99,7 +101,8 @@ impl BlockchainService for EthersBlockchainService {
             
             // Create merged step object
             let mut step = serde_json::json!({
-                "pc": pc,
+                // Get 0x-prefixed hexadecimal pc
+                "pc": format!("0x{:x}", pc),
                 "op": op,
                 "stack": stack,
                 "depth": depth

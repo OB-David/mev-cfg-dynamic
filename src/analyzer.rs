@@ -1,6 +1,6 @@
 use crate::blockchain::{BlockchainService, BytecodeCache};
 use crate::cfg_gen::{
-    cfg_graph::CFGRunner,
+    cfg_graph::{CFGRunner, Edges},
     dasm::{self, InstructionBlock},
     trace::{self, CallEdge, TraceStep},
 };
@@ -24,6 +24,8 @@ pub struct ContractCFG {
     pub address: H160,
     pub cfg_runner: CFGRunner<'static>,
     pub executed_pcs: HashSet<u16>,
+    // 新增：用于存储边的编号
+    pub edge_numbering: HashMap<((u16, u16), (u16, u16), Edges), u32>,
 }
 
 /// Node in the global transaction graph
@@ -165,12 +167,118 @@ impl TransactionAnalyzer {
             false,
         );
         
+        // 假设这里调用 process_trace_and_number_edges
+        let edge_numbering = self.process_trace_and_number_edges(&mut cfg_runner, &filtered_steps);
+
         Ok(ContractCFG {
             address: *address,
-            cfg_runner,
+            cfg_runner: cfg_runner,
             executed_pcs,
+            edge_numbering,
         })
     }
+// 新增：处理trace并编号边的函数
+    pub fn process_trace_and_number_edges(&self, cfg_runner: &mut CFGRunner, trace_steps: &[TraceStep]) -> HashMap<((u16, u16), (u16, u16), Edges), u32> {
+        let mut edge_numbering: HashMap<((u16, u16), (u16, u16), Edges), u32> = HashMap::new();
+        let mut edge_counter = 0;
+
+        let mut i = 0;
+        while i < trace_steps.len() {
+            let current_step = &trace_steps[i];
+            let current_pc = current_step.pc.unwrap_or(0);
+            let current_index = i; // 记录当前行号（索引）
+
+            // 检查是否遇到STOP或RETURN指令，若是则终止遍历（限制在单个合约内）
+            if let Some(op) = &current_step.op {
+                if op == "STOP" || op == "RETURN" {
+                    println!("检测到{}指令，终止当前合约的遍历", op);
+                    break; // 退出整个循环，不再处理后续步骤
+                }
+            }
+
+            if let Some(op) = &current_step.op {
+                if op == "JUMP" || op == "JUMPI" {
+                    let default_stack = vec![];
+                    let stack = current_step.stack.as_ref().unwrap_or(&default_stack);
+                    let mut destination_pc = 0;
+
+                    if op == "JUMP" {
+                        destination_pc = stack.last().and_then(|val| u16::from_str_radix(&val[2..], 16).ok()).unwrap_or(0);
+                        // 以16进制打印JUMP信息，带0x前缀
+                        println!("检测到JUMP指令: 从PC 0x{:x} (行号 {}) 跳转到 PC 0x{:x}", current_pc, current_index, destination_pc);
+                    } else if op == "JUMPI" {
+                        let condition = stack.get(stack.len() - 2).and_then(|val| u16::from_str_radix(&val[2..], 16).ok()).unwrap_or(0);
+                        if condition == 0 {
+                            // 查找当前pc之后最近的下一个pc，且行号大于当前行号
+                            destination_pc = trace_steps[i+1..]
+                                .iter()
+                                .enumerate() // 同时获取相对索引
+                                .filter_map(|(relative_idx, step)| {
+                                    step.pc.map(|pc| (relative_idx, pc))
+                                })
+                                // 确保pc大于当前pc，且绝对行号（当前行号+1+相对索引）大于当前行号
+                                .filter(|&(_, pc)| pc > current_pc)
+                                // 按pc值排序找到最小的有效pc
+                                .min_by_key(|&(_, pc)| pc)
+                                // 提取pc值，如果没找到则使用current_pc + 1
+                                .map(|(_, pc)| pc)
+                                .unwrap_or(current_pc + 1);
+                            
+                            // 以16进制打印JUMPI条件为0的信息
+                            println!("检测到JUMPI指令: 条件为0，从PC 0x{:x} (行号 {}) 跳转到最近的下一个PC 0x{:x}", current_pc, current_index, destination_pc);
+                        } else {
+                            destination_pc = stack.last().and_then(|val| u16::from_str_radix(&val[2..], 16).ok()).unwrap_or(0);
+                            // 以16进制打印JUMPI条件为非0的信息
+                            println!("检测到JUMPI指令: 条件为非0，从PC 0x{:x} (行号 {}) 跳转到 PC 0x{:x}", current_pc, current_index, destination_pc);
+                        }
+                    }
+
+                    let from_node = cfg_runner.get_node_from_pc(current_pc);
+                    let to_node = cfg_runner.get_node_from_pc(destination_pc);
+
+                    let edge_type = if op == "JUMP" {
+                        Edges::Jump
+                    } else if op == "JUMPI" && destination_pc == current_pc + 1 {
+                        Edges::ConditionFalse
+                    } else {
+                        Edges::ConditionTrue
+                    };
+
+                    if!cfg_runner.cfg_dag.contains_edge(from_node, to_node) {
+                        cfg_runner.cfg_dag.add_edge(from_node, to_node, edge_type);
+                    }
+
+                    let edge_key = (from_node, to_node, edge_type);
+                    if!edge_numbering.contains_key(&edge_key) {
+                        edge_numbering.insert(edge_key, edge_counter);
+                        edge_counter += 1;
+                    }
+
+                    // 从新的pc开始继续遍历，确保下一个索引大于当前索引
+                    let next_index = trace_steps[i+1..]
+                        .iter()
+                        .position(|step| step.pc.unwrap_or(0) == destination_pc)
+                        .map(|pos| i + 1 + pos) // 计算绝对索引
+                        .unwrap_or(i + 1); // 如果没找到，至少向前移动一步
+                    
+                    // 确保索引递增，防止循环
+                    if next_index <= current_index {
+                        println!("警告：可能的循环检测，强制索引递增");
+                        i = current_index + 1;
+                    } else {
+                        i = next_index;
+                    }
+                } else {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+
+        edge_numbering
+    }
+    
     
     /// Create global transaction graph
     pub fn build_global_transaction_graph(&mut self) -> Result<()> {
@@ -254,18 +362,18 @@ impl TransactionAnalyzer {
     /// Export global transaction graph in DOT format
     pub fn export_global_graph_dot(&self) -> String {
         let mut dot_str = String::new();
-        
+
         writeln!(&mut dot_str, "digraph G {{").unwrap();
         writeln!(&mut dot_str, "    rankdir=TB;").unwrap();
         writeln!(&mut dot_str, "    node [shape=box, style=\"filled, rounded\", color=\"#565f89\", fontcolor=\"#c0caf5\", fontname=\"Helvetica\", fillcolor=\"#24283b\"];").unwrap();
         writeln!(&mut dot_str, "    edge [color=\"#414868\", fontcolor=\"#c0caf5\", fontname=\"Helvetica\"];").unwrap();
         writeln!(&mut dot_str, "    bgcolor=\"#1a1b26\";").unwrap();
-        
+
         // Add nodes
         for (idx, node) in self.global_graph.node_indices().zip(self.global_graph.node_weights()) {
             let addr_str = format!("{:?}", node.contract_address);
             let label = format!("{}\\nPC: {}\\n{}", addr_str, node.pc, node.instruction.replace('"', "\\\""));
-            
+
             // Apply the same highlighting logic as in cfg_dot_str_highlighted_only
             // Color priority: SSTORE > ADD/SUB > others
             let fillcolor = if node.contains_sstore {
@@ -275,7 +383,7 @@ impl TransactionAnalyzer {
             } else {
                 "#9ece6a" // Green for others
             };
-            
+
             writeln!(
                 &mut dot_str,
                 "    {} [label=\"{}\", fillcolor=\"{}\", fontcolor=\"#1a1b26\"];",
@@ -284,30 +392,64 @@ impl TransactionAnalyzer {
                 fillcolor
             ).unwrap();
         }
-        
+
         // Add edges
         for edge in self.global_graph.edge_references() {
             let (from, to) = (edge.source().index(), edge.target().index());
-            
+
             match &edge.weight() {
                 TransactionEdge::Internal(edge_type) => {
+                    let from_node = self.global_graph.node_weight(edge.source()).unwrap();
+                    let to_node = self.global_graph.node_weight(edge.target()).unwrap();
+                    let contract_cfg = self.contract_cfgs.get(&from_node.contract_address).unwrap();
+                    let from_pc = from_node.pc;
+                    let to_pc = to_node.pc;
+                    let from_block = contract_cfg.cfg_runner.get_node_from_pc(from_pc);
+                    let to_block = contract_cfg.cfg_runner.get_node_from_pc(to_pc);
+                    let edge_type_enum = match edge_type.as_str() {
+                        "ConditionTrue" => Edges::ConditionTrue,
+                        "ConditionFalse" => Edges::ConditionFalse,
+                        "SymbolicJump" => Edges::SymbolicJump,
+                        _ => Edges::Jump,
+                    };
+                    let edge_key = (from_block, to_block, edge_type_enum);
+                    let edge_number = contract_cfg.edge_numbering.get(&edge_key).cloned().unwrap_or(0);
+
+                    // 为编号设置颜色（与边颜色一致，或使用对比色）
                     let style = match edge_type.as_str() {
-                        "ConditionTrue" => "color=\"#9ece6a\", label=\"True\"",
-                        "ConditionFalse" => "color=\"#f7768e\", label=\"False\"",
-                        "SymbolicJump" => "color=\"#e0af68\", style=\"dotted\", label=\"Symbolic\"",
-                        _ => "color=\"#414868\""
+                        "ConditionTrue" => {
+                            // 边颜色为#9ece6a（绿色），编号使用白色对比
+                            format!("color=\"#9ece6a\", label=<True - <font color=\"white\">#{}</font>>", edge_number)
+                        }
+                        "ConditionFalse" => {
+                            // 边颜色为#f7768e（红色），编号使用白色对比
+                            format!("color=\"#f7768e\", label=<False - <font color=\"white\">#{}</font>>", edge_number)
+                        }
+                        "SymbolicJump" => {
+                            // 边颜色为#e0af68（金色），编号使用深色对比
+                            format!("color=\"#e0af68\", style=\"dotted\", label=<Symbolic - <font color=\"#333333\">#{}</font>>", edge_number)
+                        }
+                        _ => {
+                            // 边颜色为#414868（深蓝色），编号使用白色对比
+                            format!("color=\"#414868\", label=<#<font color=\"white\">{}</font>>", edge_number)
+                        }
                     };
                     writeln!(&mut dot_str, "    {} -> {} [{}];", from, to, style).unwrap();
                 },
                 TransactionEdge::External(call_type) => {
-                    let style = "color=\"#7aa2f7\", style=\"bold\", penwidth=2, label=\"".to_owned() + call_type + "\"";
+                    // 外部调用边，为编号（此处是call_type）设置颜色
+                    let style = format!(
+                        "color=\"#7aa2f7\", style=\"bold\", penwidth=2, label=<{}>",
+                        // 用蓝色突出显示外部调用类型
+                        format!("<font color=\"#0000ff\">{}</font>", call_type)
+                    );
                     writeln!(&mut dot_str, "    {} -> {} [{}];", from, to, style).unwrap();
                 }
             }
         }
-        
+
         writeln!(&mut dot_str, "}}").unwrap();
-        
+
         dot_str
     }
     
@@ -329,7 +471,7 @@ impl TransactionAnalyzer {
             .arg(dot_path)
             .output()?;
             
-        if !output.status.success() {
+        if!output.status.success() {
             return Err(eyre!("Conversion failed: {}", String::from_utf8_lossy(&output.stderr)));
         }
         
@@ -337,14 +479,16 @@ impl TransactionAnalyzer {
     }
 
     /// Export individual contract CFGs with only highlighted nodes and edges
+    // 在TransactionAnalyzer的export_contract_highlighted_cfgs方法中
     pub fn export_contract_highlighted_cfgs(&self) -> HashMap<H160, String> {
         let mut results = HashMap::new();
-        
+
         for (address, contract_cfg) in &self.contract_cfgs {
-            let dot_str = contract_cfg.cfg_runner.cfg_dot_str_highlighted_only();
+            // 传入预定义的边编号
+            let dot_str = contract_cfg.cfg_runner.cfg_dot_str_highlighted_only(&contract_cfg.edge_numbering);
             results.insert(*address, dot_str);
         }
-        
+
         results
     }
     

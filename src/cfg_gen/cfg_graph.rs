@@ -348,12 +348,13 @@ impl<'main> CFGRunner<'main> {
     }
 
     /// Export only highlighted nodes and edges (only executed parts)
-    pub fn cfg_dot_str_highlighted_only(&self) -> String {
+    // 修改方法签名，接收edge_numbering参数
+    pub fn cfg_dot_str_highlighted_only(&self, edge_numbering: &HashMap<((u16, u16), (u16, u16), Edges), u32>) -> String {
         let mut dot_str = Vec::new();
         let raw_start_str = r##"digraph G {
-    node [shape=box, style="filled, rounded", color="#565f89", fontcolor="#1a1b26", fontname="Helvetica"];
-    edge [color="#9ece6a", fontcolor="#1a1b26", fontname="Helvetica", penwidth=3];
-    bgcolor="#1a1b26";"##;
+        node [shape=box, style="filled, rounded", color="#565f89", fontcolor="#1a1b26", fontname="Helvetica"];
+        edge [fontcolor="#1a1b26", fontname="Helvetica", penwidth=3];  // 移除固定颜色，改为按类型设置
+        bgcolor="#1a1b26";"##;
         dot_str.push(raw_start_str.to_string());
 
         // Only output highlighted nodes
@@ -396,12 +397,44 @@ impl<'main> CFGRunner<'main> {
                 }
             }
 
-            // Only output highlighted edges (from and to both highlighted)
-            for (from, to, _edge_type) in self.cfg_dag.all_edges() {
+            // Only output highlighted edges with predefined numbers from edge_numbering
+            for (from, to, edge_type) in self.cfg_dag.all_edges() {
                 if pcs.contains(&from.0) && pcs.contains(&to.0) {
+                    // 修复：解引用edge_type以匹配HashMap的键类型
+                    let edge_key = ((from.0, from.1), (to.0, to.1), *edge_type);
+                    // 从预定义的edge_numbering中获取编号
+                    let edge_number = edge_numbering.get(&edge_key).cloned().unwrap_or(0);
+                    
+                    // 根据边类型设置样式（与全局图保持一致的配色方案）
+                    let (color, style, edge_label) = match edge_type {
+                        Edges::ConditionTrue => ("#9ece6a", "", "True"),
+                        Edges::ConditionFalse => ("#f7768e", "", "False"),
+                        Edges::SymbolicJump => ("#e0af68", "dotted", "Symbolic"),
+                        Edges::Jump => ("#414868", "", "Jump"),
+                    };
+                    
+                    // 创建带背景的标签，确保编号清晰可见
+                    let styled_label = format!(
+                        "<table border=\"0\" cellborder=\"1\" cellpadding=\"2\" bgcolor=\"white\">
+                            <tr><td><font color=\"black\"><b>{} #{}</b></font></td></tr>
+                         </table>",
+                        edge_label, edge_number
+                    );
+                    
+                    // 组合边的所有属性
+                    let edge_attributes = vec![
+                        format!("color=\"{}\"", color),
+                        if !style.is_empty() { format!("style=\"{}\"", style) } else { String::new() },
+                        format!("label=<{}>", styled_label)
+                    ].into_iter()
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                    
                     dot_str.push(format!(
-                        "\"{}_{}\" -> \"{}_{}\";",
-                        from.0, from.1, to.0, to.1
+                        "\"{}_{}\" -> \"{}_{}\" [{}];",
+                        from.0, from.1, to.0, to.1,
+                        edge_attributes
                     ));
                 }
             }
@@ -414,4 +447,4 @@ impl<'main> CFGRunner<'main> {
     pub fn set_executed_pcs(&mut self, pcs: HashSet<u16>) {
         self.executed_pcs = Some(pcs);
     }
-}
+}   

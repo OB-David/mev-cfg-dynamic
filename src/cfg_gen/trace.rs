@@ -1,10 +1,31 @@
 use ethers::types::H160;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
+
+// 自定义反序列化函数，用于将十六进制字符串转换为 u16
+fn parse_hex_pc<'de, D>(deserializer: D) -> Result<Option<u16>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    match s {
+        Some(s) => {
+            if s.starts_with("0x") {
+                u16::from_str_radix(&s[2..], 16).map(Some).map_err(serde::de::Error::custom)
+            } else {
+                u16::from_str_radix(&s, 10).map(Some).map_err(serde::de::Error::custom)
+            }
+        }
+        None => Ok(None),
+    }
+}
+
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct TraceStep {
+    #[serde(deserialize_with = "parse_hex_pc")]
     pub pc: Option<u16>,
     pub op: Option<String>,
     pub gas: Option<u64>,

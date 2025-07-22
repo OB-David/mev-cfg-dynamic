@@ -24,3 +24,7 @@ dotenv = "0.15.0"
 ethers = { version = "2.0", features = ["ws", "rustls"] }
 async-trait = "0.1.68"
 tokio = { version = "1.28.2", features = ["full"] }
+[profile.dev]
+incremental = true
+[profile.release]
+incremental = true
