@@ -1,0 +1,3 @@
+cargo:rustc-link-lib=static=ring-core
+cargo:rustc-link-lib=static=ring-test
+cargo:rustc-link-search=native=/mnt/d/MEV/MYCODE/mev-cfg/target/release/build/ring-8497236e884f3b27/out

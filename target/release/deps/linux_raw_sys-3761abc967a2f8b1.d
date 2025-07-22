@@ -1,0 +1,10 @@
+/mnt/d/MEV/MY CODE/mev-cfg/target/release/deps/linux_raw_sys-3761abc967a2f8b1.d: /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/lib.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/errno.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/general.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/ioctl.rs
+
+/mnt/d/MEV/MY CODE/mev-cfg/target/release/deps/liblinux_raw_sys-3761abc967a2f8b1.rlib: /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/lib.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/errno.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/general.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/ioctl.rs
+
+/mnt/d/MEV/MY CODE/mev-cfg/target/release/deps/liblinux_raw_sys-3761abc967a2f8b1.rmeta: /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/lib.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/errno.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/general.rs /home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/ioctl.rs
+
+/home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/lib.rs:
+/home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/errno.rs:
+/home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/general.rs:
+/home/drummond_ren/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.3.8/src/x86_64/ioctl.rs:

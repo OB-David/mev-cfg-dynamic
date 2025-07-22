@@ -1,0 +1,3 @@
+cargo:rerun-if-changed=build/main.rs
+cargo:rustc-env=TYPENUM_BUILD_CONSTS=/mnt/d/MEV/MY CODE/mev-cfg/target/release/build/typenum-aa7ef5c667d73d06/out/consts.rs
+cargo:rustc-env=TYPENUM_BUILD_OP=/mnt/d/MEV/MY CODE/mev-cfg/target/release/build/typenum-aa7ef5c667d73d06/out/op.rs
