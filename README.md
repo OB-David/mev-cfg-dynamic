@@ -25,7 +25,7 @@ This tool is forked from the original [evm-cfg](https://github.com/plotchy/evm-c
 
 ```bash
 git clone https://github.com/OB-David/mev-cfg-dynamic.git
-cd mev-cfg
+cd mev-cfg-dynamic
 cargo build --release
 ```
 
