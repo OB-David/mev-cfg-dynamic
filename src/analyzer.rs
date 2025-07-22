@@ -177,24 +177,25 @@ impl TransactionAnalyzer {
             edge_numbering,
         })
     }
-// 新增：处理trace并编号边的函数
+    // 新增：处理trace并编号边的函数
     pub fn process_trace_and_number_edges(&self, cfg_runner: &mut CFGRunner, trace_steps: &[TraceStep]) -> HashMap<((u16, u16), (u16, u16), Edges), u32> {
         let mut edge_numbering: HashMap<((u16, u16), (u16, u16), Edges), u32> = HashMap::new();
         let mut edge_counter = 0;
+        // 存储已出现过的行号（trace_steps的索引，单增且唯一）
+        let mut seen_line_numbers = HashSet::new();
 
         let mut i = 0;
         while i < trace_steps.len() {
+            // 检查当前行号是否已出现过，若已出现则终止处理
+            if seen_line_numbers.contains(&i) {
+                println!("检测到重复行号 {}，终止当前合约的遍历", i);
+                break;
+            }
+            seen_line_numbers.insert(i);
+
             let current_step = &trace_steps[i];
             let current_pc = current_step.pc.unwrap_or(0);
-            let current_index = i; // 记录当前行号（索引）
-
-            // 检查是否遇到STOP或RETURN指令，若是则终止遍历（限制在单个合约内）
-            if let Some(op) = &current_step.op {
-                if op == "STOP" || op == "RETURN" {
-                    println!("检测到{}指令，终止当前合约的遍历", op);
-                    break; // 退出整个循环，不再处理后续步骤
-                }
-            }
+            let current_index = i; // 当前行号（索引）
 
             if let Some(op) = &current_step.op {
                 if op == "JUMP" || op == "JUMPI" {
@@ -278,7 +279,6 @@ impl TransactionAnalyzer {
 
         edge_numbering
     }
-    
     
     /// Create global transaction graph
     pub fn build_global_transaction_graph(&mut self) -> Result<()> {
